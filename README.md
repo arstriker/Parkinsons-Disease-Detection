@@ -152,10 +152,19 @@ python train.py
 
 ---
 
-## 🔬 Dataset Acknowledgments
+## 🔬 Dataset Sources & Download Links
 
-- **Primary Dataset:** Kaggle "Parkinson's Drawings" dataset (spiral + wave drawings from healthy controls & PD patients).
-- **Secondary Dataset:** NIATS-UFU HandPD / NewHandPD dataset (spiral and meander drawings captured via digitizing tablets).
+The pipeline combines a primary benchmark dataset and a secondary multi-device dataset to achieve high generalization:
+
+1. **Primary Dataset: Kaggle "Parkinson's Drawings" Dataset (204 images)**
+   - **Modality:** Spiral and Wave hand drawings (Healthy vs. Parkinson's)
+   - **Download Link:** [Kaggle Parkinson's Drawings Dataset](https://www.kaggle.com/datasets/kmader/parkinsons-drawings)
+   - **Target Folder:** `dataset/kaggle/`
+
+2. **Secondary Dataset: HandPD Dataset (NIATS-UFU)**
+   - **Modality:** Spiral and Meander drawings with varied stroke thickness & acquisition devices
+   - **Download Link:** [HandPD Dataset (UNESP/NIATS-UFU Official Host Page)](https://wwwp.fc.unesp.br/~papa/pub/datasets/Handpd/)
+   - **Target Folders:** `dataset/Spiral_HandPD/` and `dataset/Meander_HandPD/`
 
 ---
 
