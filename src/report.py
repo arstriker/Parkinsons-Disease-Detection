@@ -1,0 +1,192 @@
+import os
+import datetime
+from PIL import Image
+
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    HAS_REPORTLAB = True
+except ImportError:
+    HAS_REPORTLAB = False
+
+try:
+    from fpdf import FPDF
+    HAS_FPDF = True
+except ImportError:
+    HAS_FPDF = False
+
+
+def generate_pdf_report(
+    input_img_path,
+    heatmap_img_path,
+    prediction_label,
+    confidence_score,
+    stroke_metrics=None,
+    output_pdf_path="parkinson_detection_report.pdf"
+):
+    """
+    Generates a professional PDF diagnostic report containing input stroke drawing,
+    Grad-CAM explainability visual, confidence metric, stroke quantitative metrics,
+    and clinician diagnostic summary.
+    """
+    os.makedirs(os.path.dirname(os.path.abspath(output_pdf_path)), exist_ok=True)
+    
+    if HAS_REPORTLAB:
+        return _generate_with_reportlab(
+            input_img_path, heatmap_img_path, prediction_label,
+            confidence_score, stroke_metrics, output_pdf_path
+        )
+    elif HAS_FPDF:
+        return _generate_with_fpdf(
+            input_img_path, heatmap_img_path, prediction_label,
+            confidence_score, stroke_metrics, output_pdf_path
+        )
+    else:
+        raise RuntimeError("Neither 'reportlab' nor 'fpdf2' is available for PDF report generation.")
+
+
+def _generate_with_reportlab(
+    input_img_path, heatmap_img_path, prediction_label,
+    confidence_score, stroke_metrics, output_pdf_path
+):
+    input_img_path = os.path.abspath(input_img_path)
+    heatmap_img_path = os.path.abspath(heatmap_img_path)
+    output_pdf_path = os.path.abspath(output_pdf_path)
+    doc = SimpleDocTemplate(
+        output_pdf_path,
+        pagesize=letter,
+        rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
+    )
+    styles = getSampleStyleSheet()
+    story = []
+
+    # Title
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontSize=20,
+        leading=24,
+        textColor=colors.HexColor('#1E3A8A'),
+        spaceAfter=12
+    )
+    story.append(Paragraph("Early Parkinson's Disease Detection Report", title_style))
+
+    # Timestamp & Metadata
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    meta_text = f"<b>Report Generated:</b> {now_str} &nbsp;|&nbsp; <b>Model Backbone:</b> ResNet-18 Transfer Learning"
+    story.append(Paragraph(meta_text, styles['Normal']))
+    story.append(Spacer(1, 15))
+
+    # Prediction Summary Table
+    is_pd = "parkinson" in prediction_label.lower()
+    label_color = colors.HexColor('#DC2626') if is_pd else colors.HexColor('#16A34A')
+    
+    table_data = [
+        [
+            Paragraph("<b>Diagnostic Prediction:</b>", styles['Normal']),
+            Paragraph(f"<font color='{label_color.hexval()}'><b>{prediction_label.upper()}</b></font>", styles['Normal'])
+        ],
+        [
+            Paragraph("<b>Confidence Score:</b>", styles['Normal']),
+            Paragraph(f"<b>{confidence_score:.2f}%</b>", styles['Normal'])
+        ]
+    ]
+
+    if stroke_metrics:
+        smoothness = stroke_metrics.get("smoothness_score", 0.0)
+        table_data.append([
+            Paragraph("<b>Stroke Smoothness Metric:</b>", styles['Normal']),
+            Paragraph(f"<b>{smoothness:.2f} / 100</b>", styles['Normal'])
+        ])
+
+    t = Table(table_data, colWidths=[200, 300])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F3F4F6')),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D1D5DB')),
+        ('PADDING', (0, 0), (-1, -1), 8),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 20))
+
+    # Images Section (Side-by-Side)
+    story.append(Paragraph("<b>Visual Analysis & Grad-CAM Heatmap Explainability</b>", styles['Heading2']))
+    story.append(Spacer(1, 10))
+
+    img_w, img_h = 220, 220
+    img_orig = RLImage(input_img_path, width=img_w, height=img_h)
+    img_gradcam = RLImage(heatmap_img_path, width=img_w, height=img_h)
+
+    img_table = Table([
+        [Paragraph("<b>Original Preprocessed Drawing</b>", styles['Normal']), Paragraph("<b>Grad-CAM Tremor Heatmap</b>", styles['Normal'])],
+        [img_orig, img_gradcam]
+    ], colWidths=[260, 260])
+    img_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+    ]))
+    story.append(img_table)
+    story.append(Spacer(1, 20))
+
+    # Clinical Disclaimer
+    disclaimer_style = ParagraphStyle(
+        'Disclaimer',
+        parent=styles['Italic'],
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#6B7280')
+    )
+    disclaimer_text = (
+        "<b>Notice:</b> This automated diagnostic report is generated by a computer vision deep learning model "
+        "(ResNet-18 with Grad-CAM visual attention mapping). It is intended solely to assist medical professionals "
+        "and point-of-care clinicians in early screening and should not be used as a standalone medical diagnosis."
+    )
+    story.append(Paragraph(disclaimer_text, disclaimer_style))
+
+    doc.build(story)
+    return output_pdf_path
+
+
+def _generate_with_fpdf(
+    input_img_path, heatmap_img_path, prediction_label,
+    confidence_score, stroke_metrics, output_pdf_path
+):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, "Early Parkinson's Disease Detection Report", ln=True, align='C')
+    pdf.ln(5)
+
+    pdf.set_font("Arial", '', 10)
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    pdf.cell(0, 8, f"Report Generated: {now_str} | Model: ResNet-18 Transfer Learning", ln=True)
+    pdf.ln(5)
+
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(60, 8, "Diagnostic Prediction:", border=1)
+    pdf.cell(100, 8, f"{prediction_label.upper()}", border=1, ln=True)
+
+    pdf.cell(60, 8, "Confidence Score:", border=1)
+    pdf.cell(100, 8, f"{confidence_score:.2f}%", border=1, ln=True)
+
+    if stroke_metrics:
+        smoothness = stroke_metrics.get("smoothness_score", 0.0)
+        pdf.cell(60, 8, "Stroke Smoothness Score:", border=1)
+        pdf.cell(100, 8, f"{smoothness:.2f} / 100", border=1, ln=True)
+
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, "Preprocessed Drawing & Grad-CAM Heatmap", ln=True)
+    pdf.ln(5)
+
+    pdf.image(input_img_path, x=15, y=pdf.get_y(), w=85, h=85)
+    pdf.image(heatmap_img_path, x=110, y=pdf.get_y(), w=85, h=85)
+    pdf.set_y(pdf.get_y() + 90)
+
+    pdf.set_font("Arial", 'I', 8)
+    pdf.multi_cell(0, 5, "Notice: Automated screening report powered by PyTorch ResNet-18 and Grad-CAM explainability.")
+
+    pdf.output(output_pdf_path)
+    return output_pdf_path
